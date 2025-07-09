@@ -1,7 +1,7 @@
 import Produk from "../models/ProdukModel.js";
 import LogProduk from "../models/LogProdukModel.js";
 import { insertProduk } from "./Produk.js";
-import Stok from "../models/StokModel.js";
+// import Stok from "../models/StokModel.js";
 
 export const insertLog = async (req, res) => {
   try {
@@ -25,16 +25,14 @@ export const insertLog = async (req, res) => {
       kategori,
       isProdukMasuk,
       tanggal,
-      tanggalKadaluarsa,
+      // tanggalKadaluarsa,
     } = req.body;
 
     if (
       !kode_produk ||
       !nama_produk ||
       harga === undefined ||
-      stok === undefined ||
-      !tanggal ||
-      (isProdukMasuk && !tanggalKadaluarsa) // Pastikan tanggalKadaluarsa tidak kosong untuk barang masuk, untuk barang keluar boleh kosong
+      stok === undefined
     ) {
       return res.status(400).json({ msg: "Semua field harus diisi" });
     }
@@ -72,14 +70,6 @@ export const insertLog = async (req, res) => {
           msg: "Stok tidak mencukupi",
         });
       }
-
-      // const today = new Date();
-      // const duaHarikedepan = new Date(today.getDate() + 2);
-
-      // // console.log(dueDate);
-
-      // if (tanggalKadaluarsa === duaHarikedepan) {
-      // }
 
       if (stoks.length > 0) {
         let index = 0;
