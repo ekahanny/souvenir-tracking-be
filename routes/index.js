@@ -16,10 +16,11 @@ import {
   updateUsername,
 } from "../controllers/Users.js";
 import {
-  createLog,
+  // createLog,
   deleteLog,
   getAllLogs,
-  getLogById,
+  // getLogById,
+  insertLog,
   updateLog,
 } from "../controllers/LogProduk.js";
 import { authMiddleware } from "../middleware/auth.js";
@@ -30,14 +31,18 @@ import {
   getKategoriById,
   updateKategori,
 } from "../controllers/Kategori.js";
-import { dashboard } from "../controllers/Dashboard.js";
+import {
+  getAllKegiatanWithProducts,
+  getKegiatanById,
+} from "../controllers/Kegiatan.js";
+// import { dashboard } from "../controllers/Dashboard.js";
 
 const router = express.Router();
 
 // log produk
-router.post("/produk/log", authMiddleware, createLog);
+router.post("/produk/log", authMiddleware, insertLog);
 router.get("/produk/log", authMiddleware, getAllLogs);
-router.get("/produk/log/:id", authMiddleware, getLogById);
+// router.get("/produk/log/:id", authMiddleware, getLogById);
 router.put("/produk/log/:id", authMiddleware, updateLog);
 router.delete("/produk/log/:id", authMiddleware, deleteLog);
 
@@ -49,8 +54,9 @@ router.get("/produk/:id", authMiddleware, getProdukById);
 router.put("/produk/:id", authMiddleware, updateProduk);
 router.delete("/produk/:id", authMiddleware, deleteProduk);
 
-// dashboard
-router.get("/dashboard", dashboard);
+// kegiatan
+router.get("/riwayat-kegiatan", getAllKegiatanWithProducts);
+router.get("/detail-kegiatan/:id", getKegiatanById);
 
 // Kategori
 router.post("/kategori", authMiddleware, createKategori);

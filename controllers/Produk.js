@@ -21,7 +21,7 @@ export const createProduk = async (req, res) => {
   try {
     const newProduk = await insertProduk({
       ...req.body,
-      createdBy: req.userId, // Menyimpan ID user yang membuat
+      // createdBy: req.userId, // Menyimpan ID user yang membuat
     });
 
     res.status(201).json({
@@ -95,6 +95,14 @@ export const getProdukByNama = async (req, res) => {
 
 export const getProdukById = async (req, res) => {
   try {
+    // Validasi ObjectId
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID produk tidak valid",
+      });
+    }
+
     const produk = await Produk.findById(req.params.id).populate(
       "kategori",
       "nama_kategori"
@@ -113,12 +121,14 @@ export const getProdukById = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in getProdukById:", error);
-    if (error.kind === "ObjectId") {
+
+    if (error.name === "CastError") {
       return res.status(400).json({
         success: false,
-        message: "ID tidak valid",
+        message: "Format ID tidak valid",
       });
     }
+
     res.status(500).json({
       success: false,
       message: "Server error",

@@ -1,3 +1,4 @@
+// models/LogProdukModel.js
 import mongoose from "mongoose";
 const { Schema } = mongoose;
 
@@ -8,11 +9,11 @@ const logProdukSchema = new Schema(
       ref: "Produk",
       required: true,
     },
-    createdBy: {
-      type: Schema.Types.ObjectId,
-      ref: "Users",
-      required: true,
-    },
+    // createdBy: {
+    //   type: Schema.Types.ObjectId,
+    //   ref: "User",
+    //   required: true,
+    // },
     tanggal: {
       type: Date,
       required: true,
@@ -26,15 +27,9 @@ const logProdukSchema = new Schema(
       type: Boolean,
       required: true,
     },
-    // Hanya ada untuk produk keluar
-    nama_kegiatan: {
-      type: String,
-      required: function () {
-        return !this.isProdukMasuk;
-      },
-    },
-    pic: {
-      type: String,
+    kegiatan: {
+      type: Schema.Types.ObjectId,
+      ref: "Kegiatan",
       required: function () {
         return !this.isProdukMasuk;
       },
@@ -42,6 +37,9 @@ const logProdukSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// Hapus index yang tidak diperlukan jika sudah terlanjur dibuat
+// logProdukSchema.index({ nama_kegiatan: 1 }, { unique: false });
 
 const LogProduk = mongoose.model("LogProduk", logProdukSchema);
 

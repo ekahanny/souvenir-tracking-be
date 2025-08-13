@@ -1,11 +1,12 @@
-import Users from "../models/UserModel.js";
+import User from "../models/UserModel.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
+import mongoose from "mongoose";
 
 export const getUser = async (req, res) => {
   try {
-    const user = await Users.findOne(
+    const user = await User.findOne(
       { _id: req.userId },
       { refreshToken: 0, password: 0 }
     );
@@ -16,12 +17,16 @@ export const getUser = async (req, res) => {
   }
 };
 
-// Tambahkan di controller User
 export const getUserById = async (req, res) => {
   try {
-    const user = await Users.findById(req.params.id).select(
+    // Tambahkan validasi ID
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ msg: "ID tidak valid" });
+    }
+
+    const user = await User.findById(req.params.id).select(
       "-password -refreshToken"
-    ); // Exclude sensitive data
+    );
 
     if (!user) {
       return res.status(404).json({ msg: "User tidak ditemukan" });
@@ -45,7 +50,7 @@ export const register = async (req, res) => {
   }
   const hashPassword = bcrypt.hashSync(password, 10);
   try {
-    await Users.create({
+    await User.create({
       nama: nama,
       username: username,
       email,
@@ -60,7 +65,7 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const user = await Users.findOne({ username: req.body.username });
+    const user = await User.findOne({ username: req.body.username });
     if (!user) {
       return res.status(404).json({ msg: "Username tidak ditemukan" });
     }
@@ -98,16 +103,16 @@ export const updateUsername = async (req, res) => {
     const userId = req.userId; // Diambil dari middleware JWT
 
     // Cek apakah username baru sudah dipakai oleh user lain
-    const existingUser = await Users.findOne({ username: newUsername });
+    const existingUser = await User.findOne({ username: newUsername });
     if (existingUser && existingUser._id.toString() !== userId) {
       return res.status(400).json({ msg: "Username sudah digunakan" });
     }
 
     // Update username
-    await Users.findByIdAndUpdate(userId, { username: newUsername });
+    await User.findByIdAndUpdate(userId, { username: newUsername });
 
     // Generate token baru dengan username yang diperbarui
-    const user = await Users.findById(userId);
+    const user = await User.findById(userId);
     const accessToken = jwt.sign(
       {
         userId: user._id,
@@ -144,7 +149,7 @@ export const updatePassword = async (req, res) => {
     const token = req.headers.authorization.split(" ")[1];
     const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
-    const user = await Users.findById(decoded.userId);
+    const user = await User.findById(decoded.userId);
     if (!user) return res.status(404).json({ msg: "User tidak ditemukan" });
 
     // Verifikasi password saat ini
@@ -155,7 +160,7 @@ export const updatePassword = async (req, res) => {
 
     // Update password
     const hashPassword = await bcrypt.hash(newPassword, 10);
-    await Users.findByIdAndUpdate(decoded.userId, { password: hashPassword });
+    await User.findByIdAndUpdate(decoded.userId, { password: hashPassword });
 
     res.json({ msg: "Password berhasil diubah" });
   } catch (error) {
