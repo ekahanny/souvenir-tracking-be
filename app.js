@@ -27,6 +27,7 @@
 
 import mongoose from "mongoose";
 import express from "express";
+import cors from "cors";
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -35,13 +36,18 @@ import connectToMongoDB from "./config/Database.js";
 
 dotenv.config();
 const app = express();
+const corsConfig = {
+  origin: "http://localhost:3000",
+  credential: true,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+};
 
 // Middleware
-app.use(cors({ credentials: true, origin: "http://localhost:3000" }));
+app.use(cors(corsConfig));
+app.options("", cors(corsConfig));
 app.use(cookieParser());
 app.use(express.json());
 app.use(router);
-
 // Handle koneksi MongoDB (gunakan IIFE atau async block)
 (async () => {
   try {
