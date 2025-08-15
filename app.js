@@ -1,30 +1,3 @@
-// import mongoose from "mongoose";
-// import express from "express";
-// import dotenv from "dotenv";
-// import cors from "cors";
-// import cookieParser from "cookie-parser";
-// import router from "./routes/index.js";
-// import connectToMongoDB from "./config/Database.js";
-
-// // import morgan from "morgan";
-// dotenv.config();
-// const app = express();
-
-// try {
-//   await connectToMongoDB;
-//   console.log("Database connected");
-// } catch (error) {
-//   console.log(error);
-// }
-
-// app.use(cors({ credentials: true, origin: "http://localhost:3000" }));
-// app.use(cookieParser());
-// // app.use(morgan("dev"));
-// app.use(express.json());
-// app.use(router);
-
-// app.listen(5000, () => console.log("Server running in http://localhost:5000"));
-
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -34,23 +7,26 @@ import connectToMongoDB from "./config/Database.js";
 
 dotenv.config();
 const app = express();
+
+// Konfigurasi CORS
 const corsConfig = {
   credentials: true,
   origin: ["http://localhost:3000", process.env.CLIENT_URL],
   methods: ["GET", "POST", "PUT", "DELETE"],
-}(
-  // Koneksi DB
-  async () => {
-    try {
-      await connectToMongoDB();
-    } catch (error) {
-      console.error(error);
-    }
+};
+
+// Koneksi DB
+(async () => {
+  try {
+    await connectToMongoDB();
+    console.log("Database connected");
+  } catch (error) {
+    console.error("Database connection failed:", error);
   }
-)();
+})();
 
 // Middleware
-app.options("", cors(corsConfig));
+app.options("*", cors(corsConfig));
 app.use(cors(corsConfig));
 app.use(cookieParser());
 app.use(express.json());
