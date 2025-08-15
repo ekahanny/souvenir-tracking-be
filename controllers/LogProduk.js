@@ -196,31 +196,90 @@ export const getAllLogs = async (req, res) => {
 };
 
 export const updateLog = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const log = await LogProduk.findById(req.params.id);
+    const log = await LogProduk.findById(req.params.id).session(session);
     if (!log) {
-      return res.status(404).json({ msg: "Log tidak ditemukan" });
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Log tidak ditemukan",
+      });
     }
 
-    const produk = await Produk.findOne({ nama_produk: req.body.nama_produk });
+    const produk = await Produk.findOne({
+      nama_produk: req.body.nama_produk,
+    }).session(session);
+
     if (!produk) {
-      return res.status(404).json({ msg: "Produk tidak ditemukan" });
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Produk tidak ditemukan",
+      });
     }
 
-    // Handle kegiatan update untuk produk keluar
+    // Variabel untuk menyimpan kegiatan lama dan baru
+    let oldKegiatan = null;
+    let newKegiatan = null;
     let kegiatanId = log.kegiatan;
+
+    // Handle update kegiatan untuk produk keluar
     if (!log.isProdukMasuk && (req.body.nama_kegiatan || req.body.pic)) {
+      // Dapatkan kegiatan lama jika ada
+      if (log.kegiatan) {
+        oldKegiatan = await Kegiatan.findById(log.kegiatan).session(session);
+      }
+
+      // Cari atau buat kegiatan baru
       const kegiatanData = {
-        nama_kegiatan: req.body.nama_kegiatan || log.kegiatan?.nama_kegiatan,
-        pic: req.body.pic || log.kegiatan?.pic,
+        nama_kegiatan: req.body.nama_kegiatan || oldKegiatan?.nama_kegiatan,
+        pic: req.body.pic || oldKegiatan?.pic,
       };
 
-      let kegiatan = await Kegiatan.findOne(kegiatanData);
-      if (!kegiatan) {
-        kegiatan = new Kegiatan(kegiatanData);
-        await kegiatan.save();
+      newKegiatan = await Kegiatan.findOneAndUpdate(
+        { nama_kegiatan: kegiatanData.nama_kegiatan, pic: kegiatanData.pic },
+        { $set: kegiatanData },
+        { new: true, upsert: true, session }
+      );
+
+      kegiatanId = newKegiatan._id;
+
+      // Update referensi produk di kegiatan baru jika perlu
+      if (!newKegiatan.produk.includes(produk._id)) {
+        await Kegiatan.findByIdAndUpdate(
+          newKegiatan._id,
+          { $addToSet: { produk: produk._id } },
+          { session }
+        );
       }
-      kegiatanId = kegiatan._id;
+
+      // Hapus referensi dari kegiatan lama jika ada perubahan
+      if (oldKegiatan && !oldKegiatan._id.equals(newKegiatan._id)) {
+        // Hapus referensi produk dari kegiatan lama
+        await Kegiatan.findByIdAndUpdate(
+          oldKegiatan._id,
+          {
+            $pull: { produk: produk._id },
+            $pull: { logs: log._id },
+          },
+          { session }
+        );
+
+        // Hapus kegiatan lama jika tidak ada referensi lagi
+        const updatedOldKegiatan = await Kegiatan.findById(
+          oldKegiatan._id
+        ).session(session);
+        if (
+          updatedOldKegiatan &&
+          updatedOldKegiatan.produk.length === 0 &&
+          updatedOldKegiatan.logs.length === 0
+        ) {
+          await Kegiatan.findByIdAndDelete(oldKegiatan._id, { session });
+        }
+      }
     }
 
     // Hitung selisih stok untuk update
@@ -231,7 +290,7 @@ export const updateLog = async (req, res) => {
       } else {
         produk.stok += selisih;
       }
-      await produk.save();
+      await produk.save({ session });
     }
 
     // Update log
@@ -240,18 +299,49 @@ export const updateLog = async (req, res) => {
       {
         stok: req.body.stok,
         tanggal: req.body.tanggal,
-        ...(!log.isProdukMasuk && { kegiatan: kegiatanId }),
+        ...(!log.isProdukMasuk && {
+          kegiatan: kegiatanId,
+          nama_kegiatan: req.body.nama_kegiatan,
+          pic: req.body.pic,
+        }),
       },
-      { new: true }
+      { new: true, session }
     ).populate("produk kegiatan");
 
+    // Update referensi log di kegiatan baru jika ada perubahan
+    if (newKegiatan && !newKegiatan.logs.includes(log._id)) {
+      await Kegiatan.findByIdAndUpdate(
+        newKegiatan._id,
+        { $addToSet: { logs: log._id } },
+        { session }
+      );
+    }
+
+    await session.commitTransaction();
+
     res.json({
-      msg: "Log dan Produk berhasil diperbarui",
-      updatedLog,
+      success: true,
+      data: updatedLog,
+      message: "Log dan Produk berhasil diperbarui",
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ msg: "Server error" });
+    await session.abortTransaction();
+    console.error("Error in updateLog:", error);
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: "Validasi gagal",
+        errors: Object.values(error.errors).map((val) => val.message),
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Terjadi kesalahan server",
+    });
+  } finally {
+    session.endSession();
   }
 };
 
