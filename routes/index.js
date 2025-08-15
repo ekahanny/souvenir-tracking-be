@@ -6,7 +6,7 @@ import {
   getProdukById,
   // getProdukByKode,
   updateProduk,
-} from "./controllers/Produk.js";
+} from "../controllers/Produk.js";
 import {
   getUser,
   getUserById,
@@ -14,7 +14,7 @@ import {
   register,
   updatePassword,
   updateUsername,
-} from "./controllers/Users.js";
+} from "../controllers/Users.js";
 import {
   // createLog,
   deleteLog,
@@ -22,19 +22,19 @@ import {
   // getLogById,
   insertLog,
   updateLog,
-} from "./controllers/LogProduk.js";
-import { authMiddleware } from "./middleware/auth.js";
+} from "../controllers/LogProduk.js";
+import { authMiddleware } from "../middleware/auth.js";
 import {
   createKategori,
   deleteKategori,
   getAllKategori,
   getKategoriById,
   updateKategori,
-} from "./controllers/Kategori.js";
+} from "../controllers/Kategori.js";
 import {
   getAllKegiatanWithProducts,
   getKegiatanById,
-} from "./controllers/Kegiatan.js";
+} from "../controllers/Kegiatan.js";
 // import { dashboard } from "../controllers/Dashboard.js";
 
 const router = express.Router();

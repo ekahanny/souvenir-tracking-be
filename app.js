@@ -3,7 +3,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import router from "./index.js";
+import router from "./routes/index.js";
 import connectToMongoDB from "./config/Database.js";
 
 // import morgan from "morgan";
