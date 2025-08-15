@@ -1,4 +1,6 @@
+import LogProduk from "../models/LogProdukModel.js";
 import Produk from "../models/ProdukModel.js";
+import { mongoose } from "mongoose";
 
 export const insertProduk = async (body) => {
   // Validasi nama produk harus unik
