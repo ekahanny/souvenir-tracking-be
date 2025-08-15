@@ -4,180 +4,146 @@ import Kegiatan from "../models/KegiatanModel.js";
 import mongoose from "mongoose";
 
 export const insertLog = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    // 1. Validasi Request Body
+    // Validasi input
     if (!req.body || Object.keys(req.body).length === 0) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Request body tidak boleh kosong",
       });
     }
 
-    // 2. Autentikasi User
-    // const createdBy = req.userId;
-    // if (!createdBy) {
-    //   return res.status(401).json({
-    //     success: false,
-    //     message: "User tidak terautentikasi",
-    //   });
-    // }
-
-    // 3. Destructuring Request Body
     const { nama_produk, stok, isProdukMasuk, tanggal, nama_kegiatan, pic } =
       req.body;
 
-    // 4. Validasi Field Wajib
-    if (!nama_produk || stok === undefined) {
+    // Validasi field wajib
+    if (!nama_produk || stok === undefined || stok <= 0) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: "Nama produk dan stok harus diisi",
+        message: "Nama produk dan stok (positif) harus diisi",
       });
     }
 
-    // 5. Validasi Khusus Produk Keluar
+    // Cari atau buat produk baru jika tidak ada
+    let produk = await Produk.findOne({ nama_produk }).session(session);
+    if (!produk) {
+      // Buat produk baru jika tidak ditemukan
+      produk = new Produk({
+        nama_produk,
+        kategori: req.body.kategori || null,
+        stok: 0,
+        jenis_satuan: "pcs",
+      });
+      await produk.save({ session });
+    }
+
+    // Validasi khusus produk keluar
     if (!isProdukMasuk) {
       if (!nama_kegiatan || !pic) {
+        await session.abortTransaction();
         return res.status(400).json({
           success: false,
           message: "Nama kegiatan dan PIC harus diisi untuk produk keluar",
         });
       }
-    }
 
-    // 6. Cek Keberadaan Produk
-    const produkExists = await Produk.findOne({ nama_produk });
-    if (!produkExists) {
-      return res.status(404).json({
-        success: false,
-        message: "Produk tidak ditemukan, buat produk terlebih dahulu",
-      });
-    }
+      if (stok > produk.stok) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Stok tidak cukup",
+        });
+      }
 
-    // 7. Validasi Tanggal untuk Produk Keluar
-    if (!isProdukMasuk) {
-      const firstInProdLog = await LogProduk.findOne({
-        produk: produkExists._id,
+      const firstInLog = await LogProduk.findOne({
+        produk: produk._id,
         isProdukMasuk: true,
-      }).sort({ tanggal: 1 });
+      })
+        .sort({ tanggal: 1 })
+        .session(session);
 
-      if (firstInProdLog) {
-        const inputDate = new Date(tanggal);
-        const firstInDate = new Date(firstInProdLog.tanggal);
-
-        if (inputDate < firstInDate) {
-          return res.status(400).json({
-            success: false,
-            message: `Tanggal keluar tidak boleh lebih awal dari tanggal masuk pertama (${firstInDate.toLocaleDateString()})`,
-          });
-        }
+      if (firstInLog && new Date(tanggal) < new Date(firstInLog.tanggal)) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: `Tanggal keluar tidak boleh lebih awal dari tanggal masuk pertama (${firstInLog.tanggal.toLocaleDateString()})`,
+        });
       }
     }
 
-    // 8. Validasi Stok untuk Produk Keluar
-    if (!isProdukMasuk && stok > produkExists.stok) {
-      return res.status(400).json({
-        success: false,
-        message: "Stok tidak cukup",
-      });
-    }
+    // Update stok produk
+    const newStok = isProdukMasuk ? produk.stok + stok : produk.stok - stok;
 
-    // 9. Update Stok Produk
-    const newStok = isProdukMasuk
-      ? produkExists.stok + stok
-      : produkExists.stok - stok;
-
-    const updatedProduk = await Produk.findOneAndUpdate(
-      { nama_produk },
+    await Produk.findByIdAndUpdate(
+      produk._id,
       { stok: newStok },
-      { new: true }
+      { new: true, session }
     );
 
-    // 10. Penanganan Kegiatan (Hanya untuk Produk Keluar)
+    // Kelola kegiatan (hanya untuk produk keluar)
     let kegiatanId = null;
     if (!isProdukMasuk) {
-      // Cari kegiatan berdasarkan nama dan PIC
       let kegiatan = await Kegiatan.findOne({
         nama_kegiatan,
         pic,
-      });
+      }).session(session);
 
-      // Jika kegiatan tidak ada, buat baru
       if (!kegiatan) {
         kegiatan = new Kegiatan({
           nama_kegiatan,
           pic,
-          produk: [updatedProduk._id], // Masukkan produk ke array
-          logs: [], // Inisialisasi array logs kosong
+          produk: [produk._id],
+          logs: [],
         });
-      } else {
-        // Jika kegiatan sudah ada, tambahkan produk jika belum ada
-        if (!kegiatan.produk.includes(updatedProduk._id)) {
-          kegiatan.produk.push(updatedProduk._id);
-        }
+        await kegiatan.save({ session });
+      } else if (!kegiatan.produk.includes(produk._id)) {
+        kegiatan.produk.push(produk._id);
+        await kegiatan.save({ session });
       }
-      console.log(kegiatan);
-      await kegiatan.save();
       kegiatanId = kegiatan._id;
     }
 
-    // 11. Pembuatan Log Produk
+    // Buat log produk
     const logData = {
-      produk: updatedProduk._id,
+      produk: produk._id,
       stok,
       isProdukMasuk,
       tanggal: new Date(tanggal),
-      // createdBy,
-      ...(!isProdukMasuk && { kegiatan: kegiatanId }), // Hanya tambahkan kegiatan untuk produk keluar
+      ...(!isProdukMasuk && { kegiatan: kegiatanId }),
     };
 
     const newLog = new LogProduk(logData);
-    await newLog.save();
+    await newLog.save({ session });
 
-    // 12. Update Referensi Log di Kegiatan (Hanya untuk Produk Keluar)
+    // Update referensi log di kegiatan
     if (!isProdukMasuk) {
-      await Kegiatan.findByIdAndUpdate(kegiatanId, {
-        $push: { logs: newLog._id },
-      });
+      await Kegiatan.findByIdAndUpdate(
+        kegiatanId,
+        { $push: { logs: newLog._id } },
+        { session }
+      );
     }
 
-    // 13. Populate Data untuk Response
-    const populatedLog = await LogProduk.findById(newLog._id)
-      .populate({
-        path: "produk",
-        select: "nama_produk kategori stok jenis_satuan",
-      })
-      .populate({
-        path: "kegiatan",
-        select: "nama_kegiatan pic",
-      });
-    // .populate({
-    //   path: "createdBy",
-    //   select: "name email",
-    // });
+    await session.commitTransaction();
 
-    // 14. Response Sukses
-    return res.status(201).json({
+    const populatedLog = await LogProduk.findById(newLog._id)
+      .populate("produk", "nama_produk kategori")
+      .populate("kegiatan", "nama_kegiatan pic");
+
+    res.status(201).json({
       success: true,
-      data: {
-        log: populatedLog,
-        produk: {
-          nama_produk: updatedProduk.nama_produk,
-          stok: updatedProduk.stok,
-        },
-        ...(!isProdukMasuk && {
-          kegiatan: {
-            nama_kegiatan,
-            pic,
-          },
-        }),
-      },
+      data: populatedLog,
       message: "Log produk berhasil dibuat",
     });
   } catch (error) {
-    // 15. Error Handling
+    await session.abortTransaction();
     console.error("Error in insertLog:", error);
 
-    // Handle MongoDB duplicate key error
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -186,7 +152,6 @@ export const insertLog = async (req, res) => {
       });
     }
 
-    // Handle validation errors
     if (error.name === "ValidationError") {
       const messages = Object.values(error.errors).map((val) => val.message);
       return res.status(400).json({
@@ -196,12 +161,12 @@ export const insertLog = async (req, res) => {
       });
     }
 
-    // Generic error response
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: error.message || "Terjadi kesalahan server",
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
+  } finally {
+    session.endSession();
   }
 };
 
