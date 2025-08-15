@@ -209,38 +209,21 @@ export const updateLog = async (req, res) => {
       });
     }
 
-    const produk = await Produk.findOne({
-      nama_produk: req.body.nama_produk,
-    }).session(session);
-
-    if (!produk) {
-      await session.abortTransaction();
-      return res.status(404).json({
-        success: false,
-        message: "Produk tidak ditemukan",
-      });
-    }
-
-    // Variabel untuk menyimpan kegiatan lama dan baru
-    let oldKegiatan = null;
-    let newKegiatan = null;
-    let kegiatanId = log.kegiatan;
-
-    // Handle update kegiatan untuk produk keluar
+    // Hanya update nama_kegiatan dan PIC jika ada perubahan
     if (!log.isProdukMasuk && (req.body.nama_kegiatan || req.body.pic)) {
-      // Dapatkan kegiatan lama jika ada
-      if (log.kegiatan) {
-        oldKegiatan = await Kegiatan.findById(log.kegiatan).session(session);
-      }
+      let kegiatanId = log.kegiatan;
 
-      // Cari atau buat kegiatan baru
+      // Cari kegiatan baru berdasarkan nama_kegiatan dan PIC
       const kegiatanData = {
-        nama_kegiatan: req.body.nama_kegiatan || oldKegiatan?.nama_kegiatan,
-        pic: req.body.pic || oldKegiatan?.pic,
+        nama_kegiatan: req.body.nama_kegiatan || log.nama_kegiatan,
+        pic: req.body.pic || log.pic,
       };
 
-      newKegiatan = await Kegiatan.findOneAndUpdate(
-        { nama_kegiatan: kegiatanData.nama_kegiatan, pic: kegiatanData.pic },
+      const newKegiatan = await Kegiatan.findOneAndUpdate(
+        {
+          nama_kegiatan: kegiatanData.nama_kegiatan,
+          pic: kegiatanData.pic,
+        },
         { $set: kegiatanData },
         { new: true, upsert: true, session }
       );
@@ -248,81 +231,68 @@ export const updateLog = async (req, res) => {
       kegiatanId = newKegiatan._id;
 
       // Update referensi produk di kegiatan baru jika perlu
-      if (!newKegiatan.produk.includes(produk._id)) {
+      if (!newKegiatan.produk.includes(log.produk)) {
         await Kegiatan.findByIdAndUpdate(
           newKegiatan._id,
-          { $addToSet: { produk: produk._id } },
+          { $addToSet: { produk: log.produk } },
           { session }
         );
       }
 
       // Hapus referensi dari kegiatan lama jika ada perubahan
-      if (oldKegiatan && !oldKegiatan._id.equals(newKegiatan._id)) {
-        // Hapus referensi produk dari kegiatan lama
-        await Kegiatan.findByIdAndUpdate(
-          oldKegiatan._id,
-          {
-            $pull: { produk: produk._id },
-            $pull: { logs: log._id },
-          },
-          { session }
+      if (log.kegiatan && !log.kegiatan.equals(newKegiatan._id)) {
+        const oldKegiatan = await Kegiatan.findById(log.kegiatan).session(
+          session
         );
 
-        // Hapus kegiatan lama jika tidak ada referensi lagi
-        const updatedOldKegiatan = await Kegiatan.findById(
-          oldKegiatan._id
-        ).session(session);
-        if (
-          updatedOldKegiatan &&
-          updatedOldKegiatan.produk.length === 0 &&
-          updatedOldKegiatan.logs.length === 0
-        ) {
-          await Kegiatan.findByIdAndDelete(oldKegiatan._id, { session });
+        if (oldKegiatan) {
+          // Hapus referensi produk dari kegiatan lama
+          await Kegiatan.findByIdAndUpdate(
+            oldKegiatan._id,
+            {
+              $pull: { produk: log.produk, logs: log._id },
+            },
+            { session }
+          );
+
+          // Hapus kegiatan lama jika tidak ada referensi lagi
+          const updatedOldKegiatan = await Kegiatan.findById(
+            oldKegiatan._id
+          ).session(session);
+          if (
+            updatedOldKegiatan &&
+            updatedOldKegiatan.produk.length === 0 &&
+            updatedOldKegiatan.logs.length === 0
+          ) {
+            await Kegiatan.findByIdAndDelete(oldKegiatan._id, { session });
+          }
         }
       }
+
+      // Update log dengan kegiatan baru
+      log.kegiatan = kegiatanId;
+      log.nama_kegiatan = kegiatanData.nama_kegiatan;
+      log.pic = kegiatanData.pic;
     }
 
-    // Hitung selisih stok untuk update
-    if (log.stok !== req.body.stok) {
-      const selisih = log.stok - req.body.stok;
-      if (log.isProdukMasuk) {
-        produk.stok -= selisih;
-      } else {
-        produk.stok += selisih;
-      }
-      await produk.save({ session });
+    // Update tanggal jika ada perubahan
+    if (req.body.tanggal) {
+      log.tanggal = new Date(req.body.tanggal);
     }
 
-    // Update log
-    const updatedLog = await LogProduk.findByIdAndUpdate(
-      req.params.id,
-      {
-        stok: req.body.stok,
-        tanggal: req.body.tanggal,
-        ...(!log.isProdukMasuk && {
-          kegiatan: kegiatanId,
-          nama_kegiatan: req.body.nama_kegiatan,
-          pic: req.body.pic,
-        }),
-      },
-      { new: true, session }
-    ).populate("produk kegiatan");
-
-    // Update referensi log di kegiatan baru jika ada perubahan
-    if (newKegiatan && !newKegiatan.logs.includes(log._id)) {
-      await Kegiatan.findByIdAndUpdate(
-        newKegiatan._id,
-        { $addToSet: { logs: log._id } },
-        { session }
-      );
-    }
+    // Simpan perubahan log
+    await log.save({ session });
 
     await session.commitTransaction();
 
+    const populatedLog = await LogProduk.findById(log._id)
+      .populate("produk", "nama_produk kategori")
+      .populate("kegiatan", "nama_kegiatan pic");
+
     res.json({
       success: true,
-      data: updatedLog,
-      message: "Log dan Produk berhasil diperbarui",
+      data: populatedLog,
+      message: "Log berhasil diperbarui",
     });
   } catch (error) {
     await session.abortTransaction();
