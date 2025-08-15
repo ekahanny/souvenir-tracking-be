@@ -35,7 +35,7 @@ import connectToMongoDB from "./config/Database.js";
 dotenv.config();
 const app = express();
 
-// Koneksi ke MongoDB
+// Koneksi DB
 (async () => {
   try {
     await connectToMongoDB();
@@ -48,14 +48,11 @@ const app = express();
 app.use(
   cors({
     credentials: true,
-    origin: [
-      "http://localhost:3000", // development
-      process.env.CLIENT_URL, // production
-    ],
+    origin: ["http://localhost:3000", process.env.CLIENT_URL],
   })
 );
 app.use(cookieParser());
 app.use(express.json());
 app.use(router);
 
-export default app; // Vercel akan pakai ini
+export default app;
