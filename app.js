@@ -34,23 +34,24 @@ import connectToMongoDB from "./config/Database.js";
 
 dotenv.config();
 const app = express();
-
-// Koneksi DB
-(async () => {
-  try {
-    await connectToMongoDB();
-  } catch (error) {
-    console.error(error);
+const corsConfig = {
+  credentials: true,
+  origin: ["http://localhost:3000", process.env.CLIENT_URL],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+}(
+  // Koneksi DB
+  async () => {
+    try {
+      await connectToMongoDB();
+    } catch (error) {
+      console.error(error);
+    }
   }
-})();
+)();
 
 // Middleware
-app.use(
-  cors({
-    credentials: true,
-    origin: ["http://localhost:3000", process.env.CLIENT_URL],
-  })
-);
+app.options("", cors(corsConfig));
+app.use(cors(corsConfig));
 app.use(cookieParser());
 app.use(express.json());
 app.use(router);
