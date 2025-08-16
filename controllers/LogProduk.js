@@ -209,82 +209,61 @@ export const updateLog = async (req, res) => {
       });
     }
 
-    // Validasi untuk produk keluar
-    if (!log.isProdukMasuk) {
-      // Jika ada perubahan nama_kegiatan atau PIC
-      if (req.body.nama_kegiatan || req.body.pic) {
-        let kegiatanId = log.kegiatan;
-
-        const kegiatanData = {
-          nama_kegiatan: req.body.nama_kegiatan || log.nama_kegiatan,
-          pic: req.body.pic || log.pic,
-        };
-
-        // Cari atau buat kegiatan baru
-        const newKegiatan = await Kegiatan.findOneAndUpdate(
-          {
-            nama_kegiatan: kegiatanData.nama_kegiatan,
-            pic: kegiatanData.pic,
-          },
-          { $set: kegiatanData },
-          { new: true, upsert: true, session }
-        );
-
-        kegiatanId = newKegiatan._id;
-
-        // Update referensi produk di kegiatan baru jika perlu
-        if (!newKegiatan.produk.includes(log.produk)) {
-          await Kegiatan.findByIdAndUpdate(
-            newKegiatan._id,
-            { $addToSet: { produk: log.produk } },
-            { session }
-          );
-        }
-
-        // Hapus referensi dari kegiatan lama jika ada perubahan
-        if (log.kegiatan && !log.kegiatan.equals(newKegiatan._id)) {
-          const oldKegiatan = await Kegiatan.findById(log.kegiatan).session(
-            session
-          );
-
-          if (oldKegiatan) {
-            await Kegiatan.findByIdAndUpdate(
-              oldKegiatan._id,
-              {
-                $pull: { produk: log.produk, logs: log._id },
-              },
-              { session }
-            );
-
-            // Hapus kegiatan lama jika tidak ada referensi lagi
-            const updatedOldKegiatan = await Kegiatan.findById(
-              oldKegiatan._id
-            ).session(session);
-            if (
-              updatedOldKegiatan &&
-              updatedOldKegiatan.produk.length === 0 &&
-              updatedOldKegiatan.logs.length === 0
-            ) {
-              await Kegiatan.findByIdAndDelete(oldKegiatan._id, { session });
-            }
-          }
-        }
-
-        // Update log dengan kegiatan baru
-        log.kegiatan = kegiatanId;
-        log.nama_kegiatan = kegiatanData.nama_kegiatan;
-        log.pic = kegiatanData.pic;
+    // Hanya update produk dan stok
+    if (req.body.nama_produk) {
+      const produk = await Produk.findOne({
+        nama_produk: req.body.nama_produk,
+      }).session(session);
+      if (!produk) {
+        await session.abortTransaction();
+        return res.status(404).json({
+          success: false,
+          message: "Produk tidak ditemukan",
+        });
       }
-
-      // Update tanggal jika ada perubahan
-      if (req.body.tanggal) {
-        log.tanggal = new Date(req.body.tanggal);
-      }
-
-      // Simpan perubahan log
-      await log.save({ session });
+      log.produk = produk._id;
     }
 
+    if (req.body.stok !== undefined) {
+      // Validasi stok
+      if (req.body.stok <= 0) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Stok harus positif",
+        });
+      }
+
+      // Hitung selisih stok
+      const selisih = req.body.stok - log.stok;
+      const produk = await Produk.findById(log.produk).session(session);
+
+      if (!produk) {
+        await session.abortTransaction();
+        return res.status(404).json({
+          success: false,
+          message: "Produk tidak ditemukan",
+        });
+      }
+
+      // Validasi stok cukup
+      if (selisih > 0 && selisih > produk.stok) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message: "Stok tidak cukup",
+        });
+      }
+
+      // Update stok produk
+      produk.stok -= selisih;
+      await produk.save({ session });
+
+      // Update stok log
+      log.stok = req.body.stok;
+    }
+
+    await log.save({ session });
     await session.commitTransaction();
 
     const populatedLog = await LogProduk.findById(log._id)
@@ -299,15 +278,6 @@ export const updateLog = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("Error in updateLog:", error);
-
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        success: false,
-        message: "Validasi gagal",
-        errors: Object.values(error.errors).map((val) => val.message),
-      });
-    }
-
     res.status(500).json({
       success: false,
       message: error.message || "Terjadi kesalahan server",
