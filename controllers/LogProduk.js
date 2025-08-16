@@ -209,79 +209,81 @@ export const updateLog = async (req, res) => {
       });
     }
 
-    // Hanya update nama_kegiatan dan PIC jika ada perubahan
-    if (!log.isProdukMasuk && (req.body.nama_kegiatan || req.body.pic)) {
-      let kegiatanId = log.kegiatan;
+    // Validasi untuk produk keluar
+    if (!log.isProdukMasuk) {
+      // Jika ada perubahan nama_kegiatan atau PIC
+      if (req.body.nama_kegiatan || req.body.pic) {
+        let kegiatanId = log.kegiatan;
 
-      // Cari kegiatan baru berdasarkan nama_kegiatan dan PIC
-      const kegiatanData = {
-        nama_kegiatan: req.body.nama_kegiatan || log.nama_kegiatan,
-        pic: req.body.pic || log.pic,
-      };
+        const kegiatanData = {
+          nama_kegiatan: req.body.nama_kegiatan || log.nama_kegiatan,
+          pic: req.body.pic || log.pic,
+        };
 
-      const newKegiatan = await Kegiatan.findOneAndUpdate(
-        {
-          nama_kegiatan: kegiatanData.nama_kegiatan,
-          pic: kegiatanData.pic,
-        },
-        { $set: kegiatanData },
-        { new: true, upsert: true, session }
-      );
-
-      kegiatanId = newKegiatan._id;
-
-      // Update referensi produk di kegiatan baru jika perlu
-      if (!newKegiatan.produk.includes(log.produk)) {
-        await Kegiatan.findByIdAndUpdate(
-          newKegiatan._id,
-          { $addToSet: { produk: log.produk } },
-          { session }
-        );
-      }
-
-      // Hapus referensi dari kegiatan lama jika ada perubahan
-      if (log.kegiatan && !log.kegiatan.equals(newKegiatan._id)) {
-        const oldKegiatan = await Kegiatan.findById(log.kegiatan).session(
-          session
+        // Cari atau buat kegiatan baru
+        const newKegiatan = await Kegiatan.findOneAndUpdate(
+          {
+            nama_kegiatan: kegiatanData.nama_kegiatan,
+            pic: kegiatanData.pic,
+          },
+          { $set: kegiatanData },
+          { new: true, upsert: true, session }
         );
 
-        if (oldKegiatan) {
-          // Hapus referensi produk dari kegiatan lama
+        kegiatanId = newKegiatan._id;
+
+        // Update referensi produk di kegiatan baru jika perlu
+        if (!newKegiatan.produk.includes(log.produk)) {
           await Kegiatan.findByIdAndUpdate(
-            oldKegiatan._id,
-            {
-              $pull: { produk: log.produk, logs: log._id },
-            },
+            newKegiatan._id,
+            { $addToSet: { produk: log.produk } },
             { session }
           );
+        }
 
-          // Hapus kegiatan lama jika tidak ada referensi lagi
-          const updatedOldKegiatan = await Kegiatan.findById(
-            oldKegiatan._id
-          ).session(session);
-          if (
-            updatedOldKegiatan &&
-            updatedOldKegiatan.produk.length === 0 &&
-            updatedOldKegiatan.logs.length === 0
-          ) {
-            await Kegiatan.findByIdAndDelete(oldKegiatan._id, { session });
+        // Hapus referensi dari kegiatan lama jika ada perubahan
+        if (log.kegiatan && !log.kegiatan.equals(newKegiatan._id)) {
+          const oldKegiatan = await Kegiatan.findById(log.kegiatan).session(
+            session
+          );
+
+          if (oldKegiatan) {
+            await Kegiatan.findByIdAndUpdate(
+              oldKegiatan._id,
+              {
+                $pull: { produk: log.produk, logs: log._id },
+              },
+              { session }
+            );
+
+            // Hapus kegiatan lama jika tidak ada referensi lagi
+            const updatedOldKegiatan = await Kegiatan.findById(
+              oldKegiatan._id
+            ).session(session);
+            if (
+              updatedOldKegiatan &&
+              updatedOldKegiatan.produk.length === 0 &&
+              updatedOldKegiatan.logs.length === 0
+            ) {
+              await Kegiatan.findByIdAndDelete(oldKegiatan._id, { session });
+            }
           }
         }
+
+        // Update log dengan kegiatan baru
+        log.kegiatan = kegiatanId;
+        log.nama_kegiatan = kegiatanData.nama_kegiatan;
+        log.pic = kegiatanData.pic;
       }
 
-      // Update log dengan kegiatan baru
-      log.kegiatan = kegiatanId;
-      log.nama_kegiatan = kegiatanData.nama_kegiatan;
-      log.pic = kegiatanData.pic;
-    }
+      // Update tanggal jika ada perubahan
+      if (req.body.tanggal) {
+        log.tanggal = new Date(req.body.tanggal);
+      }
 
-    // Update tanggal jika ada perubahan
-    if (req.body.tanggal) {
-      log.tanggal = new Date(req.body.tanggal);
+      // Simpan perubahan log
+      await log.save({ session });
     }
-
-    // Simpan perubahan log
-    await log.save({ session });
 
     await session.commitTransaction();
 
