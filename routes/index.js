@@ -34,6 +34,7 @@ import {
 import {
   getAllKegiatanWithProducts,
   getKegiatanById,
+  updateKegiatanFromLog,
 } from "../controllers/Kegiatan.js";
 // import { dashboard } from "../controllers/Dashboard.js";
 
@@ -56,6 +57,7 @@ router.delete("/produk/:id", authMiddleware, deleteProduk);
 
 // kegiatan
 router.get("/riwayat-kegiatan", getAllKegiatanWithProducts);
+router.put("/riwayat-kegiatan/:id", updateKegiatanFromLog);
 router.get("/detail-kegiatan/:id", getKegiatanById);
 
 // Kategori
