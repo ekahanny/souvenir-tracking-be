@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Kegiatan from "../models/KegiatanModel.js";
+import LogProduk from "../models/LogProdukModel.js";
 
 export const getAllKegiatanWithProducts = async (req, res) => {
   try {
