@@ -34,8 +34,8 @@
 
 // export default app;
 
-import express from "express";
 import dotenv from "dotenv";
+import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import router from "./routes/index.js";
@@ -46,14 +46,15 @@ const app = express();
 
 // Konfigurasi CORS
 const corsConfig = {
-  credentials: true,
-  origin: [process.env.CLIENT_URL || "http://localhost:3000"],
-  allowedHeaders: ["Content-Type", "Authorization"], // penting untuk preflight
+  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  credentials: true, // biar cookies/token ikut
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 // Middleware
 app.use(cors(corsConfig));
-app.options("*", cors(corsConfig)); // handle preflight
+app.options("*", cors(corsConfig)); // penting untuk preflight
 app.use(cookieParser());
 app.use(express.json());
 
