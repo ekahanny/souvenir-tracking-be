@@ -46,8 +46,9 @@ const app = express();
 
 // Konfigurasi CORS
 const corsConfig = {
-  origin: process.env.CLIENT_URL || "http://localhost:3000",
-  credentials: true, // biar cookies/token ikut
+  // origin: process.env.CLIENT_URL || "http://localhost:3000",
+  origin: "*",
+  credentials: false, // biar cookies/token ikut
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
