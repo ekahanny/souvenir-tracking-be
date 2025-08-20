@@ -48,18 +48,18 @@ const app = express();
 const corsConfig = {
   credentials: true,
   origin: [process.env.CLIENT_URL || "http://localhost:3000"],
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"], // penting untuk preflight
 };
 
 // Middleware
 app.use(cors(corsConfig));
+app.options("*", cors(corsConfig)); // handle preflight
 app.use(cookieParser());
 app.use(express.json());
 
 // Routing
 app.use(router);
 
-// Koneksi DB hanya sekali (hindari reconnect tiap request)
 connectToMongoDB()
   .then(() => console.log("Database connected"))
   .catch((error) => console.error("Database connection failed:", error));
